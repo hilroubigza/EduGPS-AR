@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>EduGPS Explore Pro: Smooth Radar & Anti-Drift</title>
+    <title>EduGPS Explore Pro: Smooth Radar & Auto Drive Link</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet">
@@ -131,7 +131,6 @@
         let foundSpeciesIds = new Set(); 
         let isGameStarted = false;
         
-        // ตัวแปรสำหรับระบบกันสั่น (GPS Smoothing)
         let smoothedLat = null;
         let smoothedLon = null;
         let playerCurrentLat = null;
@@ -139,8 +138,24 @@
         let phoneHeading = 0; 
 
         // ==========================================
-        // 2. ดึงข้อมูล
+        // 2. ดึงข้อมูลและแปลงลิงก์รูปภาพ
         // ==========================================
+        
+        // 🔥 ฟังก์ชันสำหรับแปลงลิงก์ Google Drive ให้อ่านรูปได้โดยตรง 🔥
+        function getDirectImageUrl(url) {
+            if (!url) return "";
+            // เช็คว่าลิงก์มาจาก Google Drive หรือไม่ โดยค้นหา /file/d/รหัสไฟล์/
+            const driveRegex = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/;
+            const match = url.match(driveRegex);
+            
+            if (match && match[1]) {
+                const fileId = match[1];
+                // แปลงเป็น Direct Link ของ Google เพื่อให้ <img> ใช้งานได้
+                return `https://drive.google.com/uc?export=view&id=${fileId}`; 
+            }
+            return url; // หากไม่ใช่ลิงก์ Google Drive ให้คืนค่าลิงก์เดิมกลับไป
+        }
+
         async function fetchGoogleSheetJSON(sheetName) {
             const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
             const res = await fetch(url);
@@ -197,7 +212,7 @@
         async function onCurrentPositionSuccess(position) {
             configCenter.lat = position.coords.latitude;
             configCenter.lon = position.coords.longitude;
-            smoothedLat = configCenter.lat; // ตั้งค่าเริ่มต้นให้ระบบกันสั่น
+            smoothedLat = configCenter.lat; 
             smoothedLon = configCenter.lon;
             playerCurrentLat = smoothedLat;
             playerCurrentLon = smoothedLon;
@@ -207,7 +222,15 @@
                 let rawList = [];
                 speciesRaw.table.rows.forEach(row => {
                     const c = row.c;
-                    if (c && c[0] && c[0].v) rawList.push({ name: c[0].v, description: c[1]?.v||"", points: c[2]?.v||0, hint: c[3]?.v||"", imageUrl: c[4]?.v||"" });
+                    if (c && c[0] && c[0].v) {
+                        rawList.push({ 
+                            name: c[0].v, 
+                            description: c[1]?.v||"", 
+                            points: c[2]?.v||0, 
+                            hint: c[3]?.v||"", 
+                            imageUrl: getDirectImageUrl(c[4]?.v||"") // 🔥 เรียกใช้ฟังก์ชันแปลงลิงก์รูปตรงนี้
+                        });
+                    }
                 });
 
                 const earthRadius = 6371000;
@@ -244,18 +267,16 @@
         function startGPSWatch() {
             navigator.geolocation.watchPosition(
                 (pos) => {
-                    // 🔥 ระบบกันสั่น 1: ถ้าระยะความคลาดเคลื่อน (accuracy) แย่กว่า 30 เมตร ให้ข้ามไปเลย ไม่เอามาคำนวณ
                     if (pos.coords.accuracy > 30 && smoothedLat !== null) return;
 
                     const rawLat = pos.coords.latitude;
                     const rawLon = pos.coords.longitude;
 
-                    // 🔥 ระบบกันสั่น 2: EMA Smoothing (ผสมค่าใหม่ 30% ค่าเก่า 70% เพื่อลดอาการเด้งไปมา)
                     if (smoothedLat === null) {
                         smoothedLat = rawLat;
                         smoothedLon = rawLon;
                     } else {
-                        const smoothingWeight = 0.3; // เปลี่ยนแปลงนุ่มนวลขึ้น
+                        const smoothingWeight = 0.3; 
                         smoothedLat = (rawLat * smoothingWeight) + (smoothedLat * (1 - smoothingWeight));
                         smoothedLon = (rawLon * smoothingWeight) + (smoothedLon * (1 - smoothingWeight));
                     }
@@ -299,8 +320,8 @@
                 
                 if (target.distance < nearestDist) nearestDist = target.distance;
 
-                // 💥 แจ้งเตือนเมื่อเจอ (ระยะ <= 1 เมตร) *แนะนำให้ปรับเป็น <= 2 ถ้านักเรียนหาไม่เจอจริงๆ
-                if (target.distance <= 2) {
+                // 💥 แจ้งเตือนเมื่อเจอ (ระยะ <= 1 เมตร)
+                if (target.distance <= 1) {
                     showFoundCard(target);
                     return; 
                 }
