@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>EduGPS Explore Pro: AR Edition</title>
+    <title>EduGPS Explore Pro: AR Direct DB</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;800&display=swap" rel="stylesheet">
 
@@ -39,14 +38,12 @@
 </head>
 <body id="bodyContainer" class="flex flex-col h-screen">
 
-    <!-- AR วิดีโอพื้นหลัง -->
     <video id="video-feed" autoplay playsinline></video>
 
-    <!-- Header -->
     <div class="overlay-ui p-6 bg-white/90 backdrop-blur-sm shadow-md flex justify-between items-start rounded-b-2xl mt-safe">
         <div>
             <h1 class="text-3xl font-extrabold text-blue-600 mb-2">EduGPS AR</h1>
-            <p class="text-gray-600 text-sm">สนาม: <span id="centerStatus" class="font-bold text-gray-800 animate-pulse">กำลังโหลด...</span></p>
+            <p class="text-gray-600 text-sm">สนาม: <span id="centerStatus" class="font-bold text-gray-800 animate-pulse">กำลังดึงข้อมูล...</span></p>
             <p id="speciesCountText" class="text-green-600 font-bold hidden text-sm">เจอแล้ว <span id="speciesFoundCount">0</span> จาก <span id="totalSpeciesCount">0</span> ชนิด</p>
         </div>
         <div id="distanceUIParent" class="text-white text-5xl font-bold bg-gray-600 p-6 rounded-full hidden shadow-lg flex items-end space-x-1 transition-colors duration-500">
@@ -55,25 +52,22 @@
         </div>
     </div>
 
-    <!-- Main Content -->
     <div id="mainContent" class="flex-grow overlay-ui flex flex-col justify-center items-center p-8 text-center text-white space-y-6 overflow-hidden">
         
         <div id="statusContainer" class="flex flex-col items-center space-y-6">
-            <h2 id="nearestSpeciesName" class="text-4xl font-extrabold text-blue-300 backdrop-blur-sm bg-black/30 p-4 rounded-xl">กำลังค้นหา...</h2>
+            <h2 id="nearestSpeciesName" class="text-4xl font-extrabold text-blue-300 backdrop-blur-sm bg-black/30 p-4 rounded-xl">กำลังตั้งค่า...</h2>
 
             <div class="bg-gray-800/80 p-6 rounded-2xl w-full max-w-lg border border-gray-700 backdrop-blur-sm">
                 <p id="gpsStatusText" class="text-xl leading-snug">ขอสิทธิ์เปิด GPS และกำลังโหลดข้อมูล...</p>
-                <p id="hintText" class="text-lg mt-3 text-gray-300 leading-snug italic hidden">"คำใบ้: ชอบอยู่ใกล้ต้นไม้ใหญ่"</p>
+                <p id="hintText" class="text-lg mt-3 text-gray-300 leading-snug italic hidden"></p>
             </div>
         </div>
 
-        <!-- หน้าจอกำลังโหลด -->
         <div id="loading" class="w-full h-full flex flex-col justify-center items-center bg-gray-900 hidden">
             <div class="w-20 h-20 border-8 border-gray-400 border-t-blue-500 rounded-full animate-spin"></div>
-            <p class="text-xl mt-6 text-gray-200">กำลังเชื่อมต่อฐานข้อมูลสนาม...</p>
+            <p class="text-xl mt-6 text-gray-200" id="loadingText">กำลังเชื่อมต่อ Database (Google Sheet)...</p>
         </div>
 
-        <!-- ป๊อปอัพแบบการ์ด -->
         <div id="foundCardContainer" class="card-container">
             <div class="card bg-white p-8 rounded-3xl shadow-2xl border-4 border-purple-500 flex flex-col space-y-5 max-w-sm w-full">
                 <h2 class="text-4xl font-extrabold text-blue-700 text-center">เจอแล้ว!</h2>
@@ -90,6 +84,7 @@
                 </div>
                 
                 <p class="text-gray-600 text-lg leading-snug">จดข้อมูลลงสมุดของหนู: <span id="foundCardDescription">...</span></p>
+                
                 <button id="closeCardBtn" class="bg-gray-800 text-white text-xl p-5 w-full rounded-2xl font-bold hover:bg-gray-700 active:bg-gray-600">จดบันทึกแล้วจ้ะ</button>
             </div>
         </div>
@@ -98,46 +93,102 @@
 
     <script>
         // ==========================================
-        // 🔥 นำ Web App URL ที่ได้จากขั้นตอนที่ 1 มาใส่ตรงนี้
+        // 1. ตั้งค่า SPREADSHEET ID (สำคัญมาก!)
         // ==========================================
-        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzV8BreLMuPm7y6gmZUWZokTT7OzaqovArgsqb3zYAVPnC9jyW6tZGEB5lNGYRXdxX-OQ/exec"; 
-
+        // 🔥 นำ ID ของ Google Sheet มาใส่ตรงนี้ (เช่น "1A2B3C4D5E6F...") 🔥
+        const SHEET_ID = "1HcMpOQZUFJQVFm0m1CJyb9clQFBoSWL7sL6PmP4DdGM"; 
+        
         let speciesData = [];
         let configCenter = { lat: 0, lon: 0, radius: 0 };
         let foundSpeciesIds = new Set(); 
 
-        async function fetchSpeciesAndCenter() {
-            document.getElementById('loading').classList.remove('hidden');
-            try {
-                const response = await fetch(APPS_SCRIPT_URL);
-                if (!response.ok) throw new Error("Network response was not ok");
-                
-                const result = await response.json();
-                
-                if (result.status === "success") {
-                    speciesData = result.data;
-                    configCenter = result.center;
-                    
-                    document.getElementById('centerStatus').innerText = `${configCenter.lat.toFixed(4)}, ${configCenter.lon.toFixed(4)}`;
-                    document.getElementById('totalSpeciesCount').innerText = speciesData.length;
-                    
-                    document.getElementById('gpsStatusText').innerText = "ข้อมูลสนามโหลดสำเร็จ! ขอเปิดกล้องหลัง...";
+        // ==========================================
+        // 2. ดึงข้อมูลตรงจาก Google Sheet (Bypass CORS)
+        // ==========================================
+        async function fetchGoogleSheetJSON(sheetName) {
+            // ใช้ Google Visualization API ดึงข้อมูลได้เลยโดยไม่ติด CORS
+            const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+            const response = await fetch(url);
+            const text = await response.text();
+            // ตัดคำสั่งครอบออกให้เหลือแค่ JSON แทร้ๆ
+            const jsonString = text.match(/google\.visualization\.Query\.setResponse\(([\s\S\w]+)\);/)[1];
+            return JSON.parse(jsonString);
+        }
 
-                    startARCamera(); 
-                    startGPSWatch(); 
+        async function initGameData() {
+            document.getElementById('loading').classList.remove('hidden');
+            
+            if (SHEET_ID === "YOUR_SPREADSHEET_ID_HERE") {
+                document.getElementById('loadingText').innerText = "กรุณาใส่ SHEET_ID ในโค้ดก่อนครับ!";
+                document.getElementById('loadingText').classList.add('text-red-400');
+                return;
+            }
+
+            try {
+                // 1. ดึงข้อมูล Config
+                const configRaw = await fetchGoogleSheetJSON('Config');
+                // ข้อมูลแถวแรกที่พิมพ์ไว้จะอยู่ใน configRaw.table.rows[0].c
+                const confCols = configRaw.table.rows[0].c;
+                configCenter = {
+                    lat: confCols[0] ? parseFloat(confCols[0].v) : 0,
+                    lon: confCols[1] ? parseFloat(confCols[1].v) : 0,
+                    radius: confCols[2] ? parseFloat(confCols[2].v) : 50
+                };
+
+                // 2. ดึงข้อมูล Species
+                const speciesRaw = await fetchGoogleSheetJSON('Species');
+                let rawSpeciesList = [];
+                
+                speciesRaw.table.rows.forEach(row => {
+                    const c = row.c;
+                    if (c && c[0] && c[0].v) {
+                        rawSpeciesList.push({
+                            name: c[0].v,
+                            description: c[1] ? c[1].v : "",
+                            points: c[2] ? c[2].v : 0,
+                            hint: c[3] ? c[3].v : "",
+                            imageUrl: c[4] ? c[4].v : ""
+                        });
+                    }
+                });
+
+                if (rawSpeciesList.length === 0) throw new Error("ไม่พบข้อมูลสิ่งมีชีวิตใน Sheet");
+
+                // 3. สุ่มพิกัด Lat/Lon ให้สิ่งมีชีวิตในฝั่ง Client
+                const earthRadius = 6371000;
+                speciesData = rawSpeciesList.map((item, index) => {
+                    const newLat = configCenter.lat + (Math.random() * 2 - 1) * (configCenter.radius / earthRadius) * (180 / Math.PI);
+                    const newLon = configCenter.lon + (Math.random() * 2 - 1) * (configCenter.radius / earthRadius) * (180 / Math.PI) / Math.cos(configCenter.lat * Math.PI / 180);
                     
-                    document.getElementById('centerStatus').classList.remove('animate-pulse');
-                    document.getElementById('loading').classList.add('hidden');
-                } else {
-                    throw new Error(result.message);
+                    return { ...item, lat: newLat, lon: newLon, id: index };
+                });
+
+                // สลับลำดับ (Shuffle)
+                for (let i = speciesData.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [speciesData[i], speciesData[j]] = [speciesData[j], speciesData[i]];
                 }
-            } catch (error) {
-                document.getElementById('gpsStatusText').innerText = "เกิดข้อผิดพลาดในการโหลด API: โปรดตรวจสอบ CORS และ URL";
+
+                // เริ่มระบบ
+                document.getElementById('centerStatus').innerText = `${configCenter.lat.toFixed(4)}, ${configCenter.lon.toFixed(4)}`;
+                document.getElementById('totalSpeciesCount').innerText = speciesData.length;
+                document.getElementById('gpsStatusText').innerText = "ข้อมูลสนามโหลดสำเร็จ! ขอเปิดกล้องหลัง...";
+                
+                document.getElementById('centerStatus').classList.remove('animate-pulse');
                 document.getElementById('loading').classList.add('hidden');
-                console.error("Fetch Error:", error);
+                
+                startARCamera(); 
+                startGPSWatch();
+
+            } catch (error) {
+                document.getElementById('loadingText').innerText = "เกิดข้อผิดพลาดในการโหลดข้อมูล: " + error.message;
+                document.getElementById('loadingText').classList.add('text-red-400');
             }
         }
 
+        // ==========================================
+        // 3. ระบบ AR กล้องหลัง (WebAR)
+        // ==========================================
         function startARCamera() {
             const video = document.getElementById('video-feed');
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -147,13 +198,14 @@
                         video.play();
                     })
                     .catch(err => {
-                        document.getElementById('gpsStatusText').innerText = "เปิดกล้องหลังไม่ได้: " + err.message;
+                        document.getElementById('gpsStatusText').innerText = "กล้องหลังถูกบล็อก (ไม่เป็นไร ยังค้นหาจากระยะทางได้)";
                     });
-            } else {
-                document.getElementById('gpsStatusText').innerText = "อุปกรณ์ไม่รองรับการเปิดกล้อง";
             }
         }
 
+        // ==========================================
+        // 4. ระบบ GPS และคำนวณระยะทาง
+        // ==========================================
         function startGPSWatch() {
             if ("geolocation" in navigator) {
                 navigator.geolocation.watchPosition(
@@ -180,20 +232,20 @@
             let nearestSpecies = null;
             let nearestDistance = Infinity;
             
-            speciesData.forEach((species, index) => {
-                if (foundSpeciesIds.has(index)) return; 
+            speciesData.forEach((species) => {
+                if (foundSpeciesIds.has(species.id)) return; 
 
                 const distance = getDistance(playerLat, playerLon, species.lat, species.lon);
                 
                 if (distance < nearestDistance) {
                     nearestDistance = distance;
-                    nearestSpecies = { ...species, id: index };
+                    nearestSpecies = species;
                 }
             });
 
             if (nearestSpecies) {
                 distanceUI.innerText = Math.round(nearestDistance);
-                distanceUIParent.classList.replace('bg-gray-600', 'bg-blue-600');
+                distanceUIParent.classList.replace('bg-blue-600', 'bg-gray-600');
                 distanceUIParent.classList.remove('hidden');
                 nearestSpeciesName.innerText = nearestSpecies.name;
                 gpsStatusText.innerText = "กำลังเข้าใกล้... ลองเดินไปตามคำใบ้ดูสิ!";
@@ -207,14 +259,15 @@
 
                 updateProximityEffects(nearestDistance);
 
+                // หากใกล้กว่า 2 เมตร ให้เด้งป๊อปอัพ
                 if (nearestDistance < 2) {
                     showFoundCard(nearestSpecies);
                 }
             } else {
                 distanceUI.innerText = "--";
-                distanceUIParent.classList.replace('bg-blue-600', 'bg-gray-600');
-                nearestSpeciesName.innerText = "กำลังค้นหา...";
-                gpsStatusText.innerText = "เดินหาสิ่งมีชีวิตที่ใกล้ที่สุดดูสิ!";
+                distanceUIParent.classList.replace('bg-gray-600', 'bg-blue-600');
+                nearestSpeciesName.innerText = "หาครบแล้ว!";
+                gpsStatusText.innerText = "เก่งมาก! คุณหาสิ่งมีชีวิตในสนามพบทั้งหมดแล้ว";
                 hintText.classList.add('hidden');
                 resetProximityEffects(); 
             }
@@ -242,22 +295,22 @@
         }
 
         function getDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; 
+            const R = 6371e3;
             const φ1 = lat1 * Math.PI/180;
             const φ2 = lat2 * Math.PI/180;
             const Δφ = (lat2-lat1) * Math.PI/180;
             const Δλ = (lon2-lon1) * Math.PI/180;
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c; 
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
         }
 
         function handleGPSError(error) {
             document.getElementById('gpsStatusText').innerText = "ไม่สามารถอ่าน GPS ได้: " + error.message;
         }
 
+        // ==========================================
+        // 5. ระบบแสดงผล (UI) แบบการ์ด
+        // ==========================================
         const cardContainer = document.getElementById('foundCardContainer');
         const statusContainer = document.getElementById('statusContainer');
 
@@ -297,7 +350,9 @@
             resetProximityEffects(); 
         });
 
-        window.onload = fetchSpeciesAndCenter;
+        // เริ่มเกมเมื่อโหลดหน้าเสร็จ
+        window.onload = initGameData;
     </script>
+
 </body>
 </html>
