@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>EduGPS Explore Pro: AR Direct DB</title>
+    <title>EduGPS Explore Pro: AR Direct DB (Full Spawn)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;800&display=swap" rel="stylesheet">
@@ -93,9 +93,8 @@
 
     <script>
         // ==========================================
-        // 1. ตั้งค่า SPREADSHEET ID (สำคัญมาก!)
+        // 1. ตั้งค่า SPREADSHEET ID (เรียบร้อยแล้ว!)
         // ==========================================
-        // 🔥 นำ ID ของ Google Sheet มาใส่ตรงนี้ (เช่น "1A2B3C4D5E6F...") 🔥
         const SHEET_ID = "1HcMpOQZUFJQVFm0m1CJyb9clQFBoSWL7sL6PmP4DdGM"; 
         
         let speciesData = [];
@@ -106,11 +105,9 @@
         // 2. ดึงข้อมูลตรงจาก Google Sheet (Bypass CORS)
         // ==========================================
         async function fetchGoogleSheetJSON(sheetName) {
-            // ใช้ Google Visualization API ดึงข้อมูลได้เลยโดยไม่ติด CORS
             const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
             const response = await fetch(url);
             const text = await response.text();
-            // ตัดคำสั่งครอบออกให้เหลือแค่ JSON แทร้ๆ
             const jsonString = text.match(/google\.visualization\.Query\.setResponse\(([\s\S\w]+)\);/)[1];
             return JSON.parse(jsonString);
         }
@@ -118,16 +115,9 @@
         async function initGameData() {
             document.getElementById('loading').classList.remove('hidden');
             
-            if (SHEET_ID === "YOUR_SPREADSHEET_ID_HERE") {
-                document.getElementById('loadingText').innerText = "กรุณาใส่ SHEET_ID ในโค้ดก่อนครับ!";
-                document.getElementById('loadingText').classList.add('text-red-400');
-                return;
-            }
-
             try {
                 // 1. ดึงข้อมูล Config
                 const configRaw = await fetchGoogleSheetJSON('Config');
-                // ข้อมูลแถวแรกที่พิมพ์ไว้จะอยู่ใน configRaw.table.rows[0].c
                 const confCols = configRaw.table.rows[0].c;
                 configCenter = {
                     lat: confCols[0] ? parseFloat(confCols[0].v) : 0,
@@ -154,16 +144,20 @@
 
                 if (rawSpeciesList.length === 0) throw new Error("ไม่พบข้อมูลสิ่งมีชีวิตใน Sheet");
 
-                // 3. สุ่มพิกัด Lat/Lon ให้สิ่งมีชีวิตในฝั่ง Client
+                // ==========================================
+                // 🔥 3. ปรับปรุงใหม่: สุ่มพิกัดครบทุกตัวพร้อมกันทันที 🔥
+                // ==========================================
                 const earthRadius = 6371000;
                 speciesData = rawSpeciesList.map((item, index) => {
+                    // สุ่ม Lat/Lon ใน Client ฝั่งหน้าบ้าน
                     const newLat = configCenter.lat + (Math.random() * 2 - 1) * (configCenter.radius / earthRadius) * (180 / Math.PI);
                     const newLon = configCenter.lon + (Math.random() * 2 - 1) * (configCenter.radius / earthRadius) * (180 / Math.PI) / Math.cos(configCenter.lat * Math.PI / 180);
                     
+                    // เก็บข้อมูลที่สุ่มแล้วลงใน Array ใหญ่เพียงครั้งเดียว
                     return { ...item, lat: newLat, lon: newLon, id: index };
                 });
 
-                // สลับลำดับ (Shuffle)
+                // สลับลำดับเพื่อให้ความรู้สึกเป็นธรรมชาติ (Shuffle)
                 for (let i = speciesData.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [speciesData[i], speciesData[j]] = [speciesData[j], speciesData[i]];
@@ -172,7 +166,7 @@
                 // เริ่มระบบ
                 document.getElementById('centerStatus').innerText = `${configCenter.lat.toFixed(4)}, ${configCenter.lon.toFixed(4)}`;
                 document.getElementById('totalSpeciesCount').innerText = speciesData.length;
-                document.getElementById('gpsStatusText').innerText = "ข้อมูลสนามโหลดสำเร็จ! ขอเปิดกล้องหลัง...";
+                document.getElementById('gpsStatusText').innerText = "ข้อมูลสนามโหลดสำเร็จ! ขอสิทธิ์เปิดกล้องหลัง...";
                 
                 document.getElementById('centerStatus').classList.remove('animate-pulse');
                 document.getElementById('loading').classList.add('hidden');
@@ -232,6 +226,7 @@
             let nearestSpecies = null;
             let nearestDistance = Infinity;
             
+            // เช็คระยะทางกับสิ่งมีชีวิต *ทุกตัว* ที่ยังไม่ถูกค้นหา พร้อมกัน
             speciesData.forEach((species) => {
                 if (foundSpeciesIds.has(species.id)) return; 
 
@@ -266,10 +261,16 @@
             } else {
                 distanceUI.innerText = "--";
                 distanceUIParent.classList.replace('bg-gray-600', 'bg-blue-600');
-                nearestSpeciesName.innerText = "หาครบแล้ว!";
-                gpsStatusText.innerText = "เก่งมาก! คุณหาสิ่งมีชีวิตในสนามพบทั้งหมดแล้ว";
-                hintText.classList.add('hidden');
-                resetProximityEffects(); 
+                
+                // ตรวจสอบว่าหาครบทุกตัวหรือยัง
+                if (foundSpeciesIds.size > 0 && foundSpeciesIds.size === speciesData.length) {
+                    nearestSpeciesName.innerText = "หาครบแล้ว!";
+                    gpsStatusText.innerText = "เก่งมาก! คุณหาสิ่งมีชีวิตในสนามพบทั้งหมดแล้ว";
+                    hintText.classList.add('hidden');
+                    resetProximityEffects(); 
+                } else {
+                    nearestSpeciesName.innerText = "กำลังค้นหา...";
+                }
             }
         }
 
@@ -350,7 +351,6 @@
             resetProximityEffects(); 
         });
 
-        // เริ่มเกมเมื่อโหลดหน้าเสร็จ
         window.onload = initGameData;
     </script>
 
