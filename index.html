@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>EduGPS Explore Pro: Smooth Radar</title>
+    <title>EduGPS Explore Pro: Smooth Radar & Anti-Drift</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel="stylesheet">
@@ -11,27 +11,21 @@
     <style>
         body { font-family: 'Prompt', sans-serif; overflow: hidden; margin: 0; padding: 0; background-color: #000; touch-action: none; }
         
-        /* วิดีโอพื้นหลัง */
         #video-feed { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
         
-        /* เอฟเฟกต์กระพริบเตือนเมื่อใกล้มาก */
         @keyframes alert-pulse { 0% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: inset 0 0 0 20px rgba(239, 68, 68, 0); } 100% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0); } }
         .alert-screen { animation: alert-pulse 1s infinite; }
         
-        /* UI พื้นฐาน */
         .glass-panel { background: rgba(17, 24, 39, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .interactive-element { pointer-events: auto; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* SafeArea สำหรับมือถือรอยบาก */
         .top-safe { top: max(10px, env(safe-area-inset-top)); }
         .bottom-safe { bottom: max(15px, env(safe-area-inset-bottom)); }
         
-        /* ลูกศรเข็มทิศ */
         .compass-arrow { display: inline-block; transition: transform 0.1s ease-out; font-size: 1.25rem; text-shadow: 0 2px 5px rgba(0,0,0,0.8); will-change: transform; }
         
-        /* กล่องป๊อปอัพ */
         .card-container { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 200; justify-content: center; align-items: center; padding: 20px; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
         .card-container.active { display: flex; }
         .card { animation: cardPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
@@ -91,7 +85,7 @@
                 <span class="text-[10px] font-bold text-green-400 flex items-center gap-1.5">
                     <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></span>เป้าหมายรอบตัว
                 </span>
-                <span class="text-[9px] text-gray-400" id="gpsAccuracyText">GPS ลิงก์แล้ว</span>
+                <span class="text-[9px] text-gray-400" id="gpsAccuracyText">รอสัญญาณ GPS...</span>
             </div>
             
             <div id="radarListContainer" class="space-y-2 overflow-y-auto no-scrollbar max-h-[35vh]">
@@ -132,14 +126,17 @@
         // ==========================================
         const SHEET_ID = "1HcMpOQZUFJQVFm0m1CJyb9clQFBoSWL7sL6PmP4DdGM"; 
         
-        let speciesData = [];    // เก็บข้อมูลสิ่งมีชีวิตพร้อมพิกัด (Lat, Lon, Bearing, Distance)
+        let speciesData = [];    
         let configCenter = { lat: 0, lon: 0, radius: 10 }; 
         let foundSpeciesIds = new Set(); 
         let isGameStarted = false;
         
+        // ตัวแปรสำหรับระบบกันสั่น (GPS Smoothing)
+        let smoothedLat = null;
+        let smoothedLon = null;
         let playerCurrentLat = null;
         let playerCurrentLon = null;
-        let phoneHeading = 0; // องศาที่มือถือหันอยู่ (รัน 60fps)
+        let phoneHeading = 0; 
 
         // ==========================================
         // 2. ดึงข้อมูล
@@ -159,7 +156,7 @@
             let customRadius = parseFloat(document.getElementById('radiusInput').value);
             configCenter.radius = (isNaN(customRadius) || customRadius < 5) ? 10 : customRadius;
 
-            initCompass(); // เปิดการขออนุญาตเข็มทิศ
+            initCompass(); 
 
             document.getElementById('startScreen').style.opacity = '0';
             setTimeout(() => { document.getElementById('startScreen').style.display = 'none'; }, 500);
@@ -174,7 +171,6 @@
             }
         });
 
-        // เข็มทิศ (Compass) - อัปเดต 60FPS
         function initCompass() {
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
@@ -187,7 +183,6 @@
             }
         }
 
-        // ฟังชันก์นี้ทำงานบ่อยมาก ห้ามมีการเปลี่ยน HTML ภายในนี้เด็ดขาด
         function handleOrientation(event) {
             let heading = null;
             if (event.webkitCompassHeading) heading = event.webkitCompassHeading;
@@ -195,15 +190,17 @@
             
             if (heading !== null) {
                 phoneHeading = heading;
-                updateArrowsOnly(); // สั่งหมุนแค่ลูกศร
+                updateArrowsOnly(); 
             }
         }
 
         async function onCurrentPositionSuccess(position) {
             configCenter.lat = position.coords.latitude;
             configCenter.lon = position.coords.longitude;
-            playerCurrentLat = configCenter.lat;
-            playerCurrentLon = configCenter.lon;
+            smoothedLat = configCenter.lat; // ตั้งค่าเริ่มต้นให้ระบบกันสั่น
+            smoothedLon = configCenter.lon;
+            playerCurrentLat = smoothedLat;
+            playerCurrentLon = smoothedLon;
             
             try {
                 const speciesRaw = await fetchGoogleSheetJSON('Species');
@@ -226,7 +223,7 @@
                 document.getElementById('mainContent').classList.remove('hidden');
                 
                 isGameStarted = true;
-                startGPSWatch(); // เริ่มคำนวณระยะทาง
+                startGPSWatch(); 
             } catch (error) {
                 document.getElementById('loadingText').innerText = "ข้อผิดพลาด: " + error.message;
             }
@@ -242,26 +239,42 @@
         }
 
         // ==========================================
-        // 4. Algorithm Optimization (แยก GPS และ Compass)
+        // 4. Algorithm Optimization & ระบบกันสั่น GPS
         // ==========================================
-        
-        // GPS - อัปเดตทุก 1 วินาที (ช้ากว่าเข็มทิศ)
         function startGPSWatch() {
             navigator.geolocation.watchPosition(
                 (pos) => {
-                    playerCurrentLat = pos.coords.latitude;
-                    playerCurrentLon = pos.coords.longitude;
-                    if(pos.coords.accuracy) document.getElementById('gpsAccuracyText').innerText = `ความแม่นยำ: ±${Math.round(pos.coords.accuracy)}ม.`;
+                    // 🔥 ระบบกันสั่น 1: ถ้าระยะความคลาดเคลื่อน (accuracy) แย่กว่า 30 เมตร ให้ข้ามไปเลย ไม่เอามาคำนวณ
+                    if (pos.coords.accuracy > 30 && smoothedLat !== null) return;
+
+                    const rawLat = pos.coords.latitude;
+                    const rawLon = pos.coords.longitude;
+
+                    // 🔥 ระบบกันสั่น 2: EMA Smoothing (ผสมค่าใหม่ 30% ค่าเก่า 70% เพื่อลดอาการเด้งไปมา)
+                    if (smoothedLat === null) {
+                        smoothedLat = rawLat;
+                        smoothedLon = rawLon;
+                    } else {
+                        const smoothingWeight = 0.3; // เปลี่ยนแปลงนุ่มนวลขึ้น
+                        smoothedLat = (rawLat * smoothingWeight) + (smoothedLat * (1 - smoothingWeight));
+                        smoothedLon = (rawLon * smoothingWeight) + (smoothedLon * (1 - smoothingWeight));
+                    }
+
+                    playerCurrentLat = smoothedLat;
+                    playerCurrentLon = smoothedLon;
+
+                    if(pos.coords.accuracy) {
+                        document.getElementById('gpsAccuracyText').innerText = `ความแม่นยำ: ±${Math.round(pos.coords.accuracy)}ม. (กันสั่น: ON)`;
+                    }
                     
-                    calculateGPSData(); // คำนวณระยะทางใหม่
-                    renderRadarList();  // วาด UI ใหม่
+                    calculateGPSData(); 
+                    renderRadarList();  
                 }, 
                 handleGPSError,
                 { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
             );
         }
 
-        // คำนวณระยะทางและองศาเป้าหมาย เก็บไว้ใน Array ก่อน
         function calculateGPSData() {
             if (!isGameStarted || !playerCurrentLat) return;
             
@@ -270,14 +283,12 @@
                 species.bearing = getBearing(playerCurrentLat, playerCurrentLon, species.lat, species.lon);
             });
             
-            // เรียงลำดับตัวที่ใกล้ที่สุด
             speciesData.sort((a, b) => a.distance - b.distance);
         }
 
-        // วาด HTML เรดาร์ (ทำแค่ตอนที่ GPS เปลี่ยนแปลงเท่านั้น! ไม่กระตุกแน่นอน)
         function renderRadarList() {
             const container = document.getElementById('radarListContainer');
-            container.innerHTML = ""; // ล้างของเก่า
+            container.innerHTML = ""; 
             
             let activeCount = 0;
             let nearestDist = Infinity;
@@ -288,15 +299,14 @@
                 
                 if (target.distance < nearestDist) nearestDist = target.distance;
 
-                // 💥 แจ้งเตือนเมื่อเจอ (ระยะ <= 1 เมตร)
-                if (target.distance <= 1) {
+                // 💥 แจ้งเตือนเมื่อเจอ (ระยะ <= 1 เมตร) *แนะนำให้ปรับเป็น <= 2 ถ้านักเรียนหาไม่เจอจริงๆ
+                if (target.distance <= 2) {
                     showFoundCard(target);
-                    return; // ไม่ต้องวาดลงลิสต์ถ้าเจอแล้ว
+                    return; 
                 }
 
                 const roundedDist = Math.round(target.distance);
                 
-                // กำหนดสีกรอบตามระยะ
                 let borderCol = "border-gray-700/50";
                 let textCol = "text-white";
                 if (target.distance <= 3) { borderCol = "border-red-500/50 bg-red-900/20"; textCol = "text-red-300"; }
@@ -322,13 +332,11 @@
                 container.insertAdjacentHTML('beforeend', itemHtml);
             });
 
-            // อัปเดต Header ด้านบน
             const distUI = document.getElementById('nearestDistText');
             const alertBox = document.getElementById('alertOverlay');
             
             if (activeCount > 0) {
                 distUI.innerText = Math.round(nearestDist);
-                // ขอบจอกระพริบเตือนถ้าระยะ < 3 เมตร
                 if (nearestDist <= 3) alertBox.classList.add('alert-screen');
                 else alertBox.classList.remove('alert-screen');
             } else {
@@ -339,13 +347,10 @@
                 }
             }
             
-            // หมุนลูกศรให้ถูกต้องทันทีที่วาดเสร็จ
             updateArrowsOnly();
         }
 
-        // 🔥 ฟังก์ชันนี้ทำงานเร็วมาก (60fps) เปลี่ยนเฉพาะ CSS องศาของลูกศรเท่านั้น
         function updateArrowsOnly() {
-            // ค้นหาเฉพาะลูกศรทั้งหมดที่มีในจอ
             const arrows = document.querySelectorAll('.compass-arrow');
             arrows.forEach(arrow => {
                 const targetBearing = parseFloat(arrow.getAttribute('data-bearing'));
@@ -354,7 +359,6 @@
             });
         }
 
-        // คณิตศาสตร์: คำนวณระยะทาง (เมตร)
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
@@ -363,7 +367,6 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
         }
 
-        // คณิตศาสตร์: คำนวณองศาทิศทาง
         function getBearing(lat1, lon1, lat2, lon2) {
             const toRad = Math.PI / 180, toDeg = 180 / Math.PI;
             const dLon = (lon2 - lon1) * toRad;
@@ -372,17 +375,17 @@
             return ((Math.atan2(y, x) * toDeg) + 360) % 360; 
         }
 
-        function handleGPSError() {
+        function handleGPSError(e) {
             if (!isGameStarted) {
                 document.getElementById('loading').classList.add('hidden');
-                alert("ระบบต้องการ GPS กรุณาอนุญาตการเข้าถึง");
+                alert("ระบบต้องการ GPS กรุณาเปิดระบบระบุตำแหน่ง");
                 document.getElementById('startScreen').style.opacity = '1';
                 document.getElementById('startScreen').style.display = 'flex';
             }
         }
 
         // ==========================================
-        // 5. ป๊อปอัพแสดงผล (เมื่อระยะ <= 1 เมตร)
+        // 5. ป๊อปอัพแสดงผล
         // ==========================================
         function showFoundCard(species) {
             if (foundSpeciesIds.has(species.id)) return; 
@@ -403,14 +406,14 @@
             document.getElementById('gameHeader').style.display = 'none';
             document.getElementById('alertOverlay').classList.remove('alert-screen');
             
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); // สั่นแจ้งเตือนรัวๆ
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]); 
         }
 
         document.getElementById('closeCardBtn').addEventListener('click', () => {
             document.getElementById('foundCardContainer').classList.remove('active'); 
-            document.getElementById('mainContent').style.display = 'block'; 
-            document.getElementById('gameHeader').style.display = 'block'; 
-            renderRadarList(); // วาดจอใหม่เผื่อว่าตัวถัดไปอยู่ใกล้
+            document.getElementById('mainContent').style.display = 'flex'; 
+            document.getElementById('gameHeader').style.display = 'flex'; 
+            renderRadarList(); 
         });
     </script>
 </body>
