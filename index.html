@@ -151,7 +151,7 @@
             if (match && match[1]) {
                 const fileId = match[1];
                 // แปลงเป็น Direct Link ของ Google เพื่อให้ <img> ใช้งานได้
-                return `https://drive.google.com/uc?export=view&id=${fileId}`; 
+                return `https://lh3.googleusercontent.com/d/${fileId}`; 
             }
             return url; // หากไม่ใช่ลิงก์ Google Drive ให้คืนค่าลิงก์เดิมกลับไป
         }
