@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Test Page</title>
+</head>
+<body style="font-family: sans-serif; padding: 20px;">
+    <h1>CORS Test Page</h1>
+    <p>หน้านี้ใช้สำหรับทดสอบการเชื่อมต่อกับ Google Apps Script (CORS Test)</p>
+    
+    <button id="testBtn" style="padding: 10px 20px; font-size: 16px;">Test Connection</button>
+    <p id="status" style="font-weight: bold; margin-top: 20px;">กำลังรอทดสอบ...</p>
+
+    <script>
+        // 🔥 สำคัญ: นำ URL ใหม่ของ Apps Script ที่ได้จากการ Deploy เมื่อสักครู่ มาใส่ที่นี่ 🔥
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzV8BreLMuPm7y6gmZUWZokTT7OzaqovArgsqb3zYAVPnC9jyW6tZGEB5lNGYRXdxX-OQ/exec"; 
+
+        document.getElementById('testBtn').addEventListener('click', async () => {
+            document.getElementById('status').innerText = "กำลังทดสอบ... (รอสักครู่)";
+            
+            try {
+                // ส่งคำขอ GET ไปยัง Apps Script
+                const response = await fetch(APPS_SCRIPT_URL);
+                const result = await response.json();
+                
+                // ถ้าสำเร็จ ให้แสดงข้อความที่ได้จาก API
+                if (result.status === "success") {
+                    document.getElementById('status').innerText = "สำเร็จ! ข้อความจาก API: " + result.message;
+                    document.getElementById('status').style.color = "green";
+                } else {
+                    document.getElementById('status').innerText = "API ทำงานแต่ส่งข้อความผิดพลาด: " + JSON.stringify(result);
+                    document.getElementById('status').style.color = "orange";
+                }
+            } catch (error) {
+                // ถ้าเกิดข้อผิดพลาด (เช่น CORS) ให้แสดงข้อความ error
+                document.getElementById('status').innerText = "เกิดข้อผิดพลาด ( Failed to fetch ): " + error.message;
+                document.getElementById('status').style.color = "red";
+                console.error("Fetch Error:", error);
+            }
+        });
+    </script>
+</body>
+</html>
