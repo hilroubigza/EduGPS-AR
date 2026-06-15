@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>EduGPS Explore Pro: AR Direct DB (Current Center)</title>
+    <title>EduGPS Explore Pro: Multi-Radar AR</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;800&display=swap" rel="stylesheet">
@@ -21,20 +21,23 @@
         .pulse-close { animation: pulse-close 1.5s infinite; }
         .pulse-very-close { animation: pulse-very-close 1s infinite; }
         
-        .bg-far { background-color: rgba(30, 58, 138, 0.3); } 
-        .bg-close { background-color: rgba(113, 63, 18, 0.3); } 
-        .bg-very-close { background-color: rgba(127, 29, 29, 0.3); } 
+        .bg-far { background-color: rgba(30, 58, 138, 0.25); } 
+        .bg-close { background-color: rgba(113, 63, 18, 0.25); } 
+        .bg-very-close { background-color: rgba(127, 29, 29, 0.25); } 
         
         .card-container { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; justify-content: center; align-items: center; padding: 20px; background-color: rgba(0,0,0,0.5); }
         .card-container.active { display: flex; }
         .card { animation: cardPop 0.5s ease-out; pointer-events: auto; }
         @keyframes cardPop { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
         
-        /* หน้าจอเริ่มเกมส์และโหลดข้อมูล */
-        .overlay-screen { position: absolute; z-index: 150; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; text-align: center; color: white; background: rgba(26, 32, 44, 0.95); }
+        .overlay-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 24px; text-align: center; color: white; background: rgba(26, 32, 44, 0.98); z-index: 150; }
         .overlay-ui { z-index: 10; pointer-events: none; position: relative; }
-        #statusContainer, #distanceUIParent { pointer-events: auto; }
+        .interactive-element { pointer-events: auto; }
         .mt-safe { margin-top: env(safe-area-inset-top); }
+        
+        /* ซ่อน Scrollbar ของรายการเรดาร์ */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body id="bodyContainer" class="flex flex-col h-screen">
@@ -42,64 +45,83 @@
     <video id="video-feed" autoplay playsinline></video>
 
     <div id="startScreen" class="overlay-screen transition-opacity duration-500">
-        <h1 class="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-6 drop-shadow-lg">
+        <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-green-400 mb-4 drop-shadow-lg">
             EduGPS Explore AR
         </h1>
-        <p class="text-white/80 text-xl md:text-2xl mb-12 max-w-2xl">
-            พร้อมสำหรับการสำรวจหรือยัง?<br>
-            กดปุ่มด้านล่างเพื่อเริ่มเกมส์โดยใช้ตำแหน่งปัจจุบันของคุณเป็นจุดศูนย์กลาง
+        <p class="text-white/70 text-lg mb-8 max-w-md">
+            ระบบสุ่มตำแหน่งสิ่งมีชีวิตรอบตัวทั้งหมดพร้อมกัน นักเรียนสามารถเลือกเดินไปหาจุดใดก่อนก็ได้ตามใจชอบ
         </p>
-        <button id="startGameBtn" class="px-10 py-5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-full text-2xl shadow-xl transform transition hover:scale-105 active:scale-95">
-            เริ่มเกมส์เลย!
+        
+        <div class="mb-8 w-full max-w-xs text-left bg-gray-800/80 p-5 rounded-2xl border border-gray-700">
+            <label class="block text-green-400 text-sm font-bold mb-2 text-center">🎯 กำหนดรัศมีการสุ่มซ่อนสิ่งมีชีวิต</label>
+            <div class="flex items-center space-x-3 mt-3">
+                <input type="number" id="radiusInput" value="10" min="5" max="500" class="w-full px-4 py-3 bg-gray-900 text-white rounded-xl border border-gray-600 focus:outline-none focus:border-green-500 text-center text-2xl font-bold">
+                <span class="text-xl font-bold text-gray-300">เมตร</span>
+            </div>
+            <p class="text-gray-400 text-xs mt-2 text-center">ระบบจะนำพิกัดปัจจุบันของคุณเป็นจุดศูนย์กลาง</p>
+        </div>
+
+        <button id="startGameBtn" class="px-12 py-5 bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-400 hover:to-blue-500 text-white font-bold rounded-full text-2xl shadow-2xl transform transition hover:scale-105 active:scale-95">
+            เริ่มค้นหาเลย!
         </button>
     </div>
 
-    <div id="loading" class="overlay-screen hidden z-150">
-        <div class="w-20 h-20 border-8 border-gray-400 border-t-blue-500 rounded-full animate-spin"></div>
-        <p class="text-xl mt-6 text-gray-200" id="loadingText">กำลังเชื่อมต่อ Database (Google Sheet)...</p>
+    <div id="loading" class="overlay-screen hidden">
+        <div class="w-20 h-20 border-8 border-gray-400 border-t-green-500 rounded-full animate-spin"></div>
+        <p class="text-xl mt-6 text-gray-200" id="loadingText">กำลังดึงข้อมูลสิ่งมีชีวิตจาก Google Sheet...</p>
     </div>
 
-    <div id="gameHeader" class="overlay-ui p-6 bg-white/90 backdrop-blur-sm shadow-md flex justify-between items-start rounded-b-2xl mt-safe hidden">
+    <div id="gameHeader" class="overlay-ui p-5 bg-white/95 backdrop-blur-sm shadow-md flex justify-between items-center rounded-b-3xl mt-safe hidden">
         <div>
-            <h1 class="text-3xl font-extrabold text-blue-600 mb-2">EduGPS AR</h1>
-            <p class="text-gray-600 text-sm">จุดเริ่ม: <span id="centerStatus" class="font-bold text-gray-800">???, ???</span></p>
-            <p id="speciesCountText" class="text-green-600 font-bold text-sm">เจอแล้ว <span id="speciesFoundCount">0</span> จาก <span id="totalSpeciesCount">0</span> ชนิด</p>
+            <h1 class="text-2xl font-extrabold text-blue-600">EduGPS Radar</h1>
+            <p id="speciesCountText" class="text-gray-700 font-semibold text-sm mt-0.5">
+                ค้นพบแล้ว <span id="speciesFoundCount" class="text-green-600 font-bold text-base">0</span> / <span id="totalSpeciesCount" class="font-bold text-base">0</span> ชนิด
+            </p>
         </div>
-        <div id="distanceUIParent" class="text-white text-5xl font-bold bg-gray-600 p-6 rounded-full hidden shadow-lg flex items-end space-x-1 transition-colors duration-500">
+        <div id="distanceUIParent" class="text-white text-4xl font-black bg-gray-600 px-5 py-3 rounded-2xl shadow-lg flex items-end space-x-0.5 transition-colors duration-500 interactive-element">
             <span id="distanceUI">--</span>
-            <span class="text-2xl font-semibold mb-2">ม.</span>
+            <span class="text-xl font-bold mb-1">ม.</span>
         </div>
     </div>
 
-    <div id="mainContent" class="flex-grow overlay-ui flex flex-col justify-center items-center p-8 text-center text-white space-y-6 overflow-hidden hidden">
+    <div id="mainContent" class="flex-grow overlay-ui flex flex-col justify-end p-5 overflow-hidden hidden">
         
-        <div id="statusContainer" class="flex flex-col items-center space-y-6">
-            <h2 id="nearestSpeciesName" class="text-4xl font-extrabold text-blue-300 backdrop-blur-sm bg-black/30 p-4 rounded-xl">กำลังตั้งค่า...</h2>
-
-            <div class="bg-gray-800/80 p-6 rounded-2xl w-full max-w-lg border border-gray-700 backdrop-blur-sm">
-                <p id="gpsStatusText" class="text-xl leading-snug">ขอสิทธิ์เปิด GPS และกล้องหลัง...</p>
-                <p id="hintText" class="text-lg mt-3 text-gray-300 leading-snug italic hidden"></p>
+        <div class="w-full max-w-md bg-gray-900/85 backdrop-blur-md rounded-3xl p-5 border border-gray-700/60 shadow-2xl flex flex-col max-h-[50vh] interactive-element">
+            <div class="flex justify-between items-center mb-3 border-b border-gray-700/50 pb-2">
+                <h2 class="text-lg font-bold text-green-400 flex items-center space-x-2">
+                    <span class="w-2.5 h-2.5 bg-green-500 rounded-full animate-ping"></span>
+                    <span>เรดาร์ตรวจจับสิ่งมีชีวิตรอบตัว</span>
+                </h2>
+                <span class="text-xs text-gray-400 italic" id="gpsAccuracyText">GPS ลิงก์แล้ว</span>
             </div>
+            
+            <div id="radarListContainer" class="space-y-2.5 overflow-y-auto no-scrollbar flex-grow pr-0.5">
+                </div>
         </div>
 
         <div id="foundCardContainer" class="card-container">
-            <div class="card bg-white p-8 rounded-3xl shadow-2xl border-4 border-purple-500 flex flex-col space-y-5 max-w-sm w-full">
-                <h2 class="text-4xl font-extrabold text-blue-700 text-center">เจอแล้ว!</h2>
+            <div class="card bg-white p-7 rounded-3xl shadow-2xl border-4 border-green-500 flex flex-col space-y-4 max-w-sm w-full">
+                <h2 class="text-4xl font-black text-green-600 text-center">ค้นพบแล้ว!</h2>
                 
-                <div class="aspect-square bg-gray-100 rounded-2xl overflow-hidden border-2 border-gray-200 flex justify-center items-center">
+                <div class="aspect-square bg-gray-50 rounded-2xl overflow-hidden border border-gray-200 flex justify-center items-center">
                     <img id="foundCardImage" src="" alt="found-species" class="w-full h-full object-contain hidden">
-                    <span id="noFoundCardImage" class="text-gray-400 text-3xl font-bold">ไม่มีรูป</span>
+                    <span id="noFoundCardImage" class="text-gray-400 text-2xl font-bold">ไม่มีรูปภาพ</span>
                 </div>
                 
-                <div class="bg-blue-50 p-5 rounded-2xl border border-blue-200 space-y-2">
-                    <p class="text-gray-600 text-lg italic leading-tight">ชื่อ:</p>
-                    <h3 id="foundCardName" class="text-3xl font-bold text-gray-900 leading-tight">???</h3>
-                    <p id="foundCardPoints" class="text-xl font-semibold text-gray-800">ได้คะแนน: +0</p>
+                <div class="bg-green-50 p-4 rounded-2xl border border-green-200 space-y-1">
+                    <p class="text-gray-500 text-sm italic">สิ่งมีชีวิตชนิดนี้คือ:</p>
+                    <h3 id="foundCardName" class="text-3xl font-black text-gray-900">???</h3>
+                    <p id="foundCardPoints" class="text-lg font-bold text-green-700">รับคะแนนสะสม: +0</p>
                 </div>
                 
-                <p class="text-gray-600 text-lg leading-snug">จดข้อมูลลงสมุดของหนู: <span id="foundCardDescription">...</span></p>
+                <p class="text-gray-600 text-base leading-snug bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <strong class="text-gray-800 block mb-0.5">📝 บันทึกลักษณะ:</strong>
+                    <span id="foundCardDescription">...</span>
+                </p>
                 
-                <button id="closeCardBtn" class="bg-gray-800 text-white text-xl p-5 w-full rounded-2xl font-bold hover:bg-gray-700 active:bg-gray-600">จดบันทึกแล้วจ้ะ</button>
+                <button id="closeCardBtn" class="bg-gray-900 text-white text-xl py-4 w-full rounded-2xl font-bold hover:bg-gray-800 active:bg-gray-700 transition">
+                    จดบันทึกลงสมุดเรียบร้อย
+                </button>
             </div>
         </div>
 
@@ -107,19 +129,17 @@
 
     <script>
         // ==========================================
-        // 1. ตั้งค่า SPREADSHEET ID (เรียบร้อยแล้ว!)
+        // 1. ตัวแปรระบบและการเชื่อมต่อฐานข้อมูล
         // ==========================================
         const SHEET_ID = "1HcMpOQZUFJQVFm0m1CJyb9clQFBoSWL7sL6PmP4DdGM"; 
         
-        let rawSpeciesList = []; // เก็บรายการสิ่งมีชีวิตดิบจาก Sheet
-        let speciesData = [];    // เก็บรายการสิ่งมีชีวิตพร้อมพิกัดสุ่ม
-        let configCenter = { lat: 0, lon: 0, radius: 50 }; // รัศมีใช้ 50ม. เป็นค่าเริ่มต้น
+        let rawSpeciesList = []; 
+        let speciesData = [];    
+        let configCenter = { lat: 0, lon: 0, radius: 10 }; // ค่ารัศมีจะถูกอัปเดตจากหน้าจออินพุต
         let foundSpeciesIds = new Set(); 
         let isGameStarted = false;
 
-        // ==========================================
-        // 2. ดึงข้อมูลตรงจาก Google Sheet (Bypass CORS)
-        // ==========================================
+        // ฟังก์ชันดึงข้อมูลตรงจากคอลัมน์ระบบ Google Sheet (Bypass CORS)
         async function fetchGoogleSheetJSON(sheetName) {
             const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
             const response = await fetch(url);
@@ -129,34 +149,42 @@
         }
 
         // ==========================================
-        // 3. เริ่มเกมส์: ขอพิกัดปัจจุบันและสุ่มตำแหน่ง
+        // 2. ควบคุมการกดปุ่มเริ่มเกมส์และการดึง GPS ปัจจุบัน
         // ==========================================
         const startScreen = document.getElementById('startScreen');
         const loadingScreen = document.getElementById('loading');
         const startGameBtn = document.getElementById('startGameBtn');
         const gameHeader = document.getElementById('gameHeader');
         const mainContent = document.getElementById('mainContent');
+        const radiusInput = document.getElementById('radiusInput');
 
         startGameBtn.addEventListener('click', () => {
-            // ซ่อนหน้าจอเริ่มเกมส์
+            // อ่านค่ารัศมีที่กำหนดจากหน้าจอเริ่มเกมส์
+            let customRadius = parseFloat(radiusInput.value);
+            if (isNaN(customRadius) || customRadius < 5) {
+                customRadius = 10; // ป้องกันค่าว่างหรือค่าน้อยเกินเกณฑ์
+            }
+            configCenter.radius = customRadius;
+
+            // ซ่อนหน้าต่างเริ่มต้น
             startScreen.style.opacity = '0';
             setTimeout(() => { startScreen.style.display = 'none'; }, 500);
             
-            // แสดงหน้าจอโหลด
+            // แสดงหน้าต่างโหลดข้อมูล
             loadingScreen.classList.remove('hidden');
             
-            // เริ่มต้นระบบ AR กล้องหลัง (WebAR) ทันทีหลังกดปุ่ม
+            // เรียกเปิดฟีดกล้องหลังทันที
             startARCamera();
             
-            // ขอพิกัดปัจจุบันเพียงครั้งเดียวเพื่อใช้เป็นจุดศูนย์กลาง
+            // เรียกขอพิกัดปัจจุบันเพื่อใช้ล็อกเป้าหมายเป็นจุดศูนย์กลางสนาม
             if ("geolocation" in navigator) {
                 navigator.geolocation.getCurrentPosition(
                     onCurrentPositionSuccess, 
                     handleGPSError,
-                    { enableHighAccuracy: true } // ขอความแม่นยำสูง
+                    { enableHighAccuracy: true }
                 );
             } else {
-                alert("อุปกรณ์ไม่รองรับ GPS");
+                alert("อุปกรณ์ไม่สนับสนุนระบบระบุตำแหน่ง GPS");
                 loadingScreen.classList.add('hidden');
                 startScreen.style.display = 'flex';
                 startScreen.style.opacity = '1';
@@ -164,15 +192,11 @@
         });
 
         async function onCurrentPositionSuccess(position) {
-            // ใช้พิกัดปัจจุบันที่ได้มาเป็นจุดศูนย์กลาง
             configCenter.lat = position.coords.latitude;
             configCenter.lon = position.coords.longitude;
             
-            // อัปเดต UI แสดงพิกัดจุดศูนย์กลาง
-            document.getElementById('centerStatus').innerText = `${configCenter.lat.toFixed(4)}, ${configCenter.lon.toFixed(4)}`;
-            
             try {
-                // 1. ดึงข้อมูล Species จาก Sheet
+                // โหลดข้อมูลรายชื่อสิ่งมีชีวิตจาก Google Sheet
                 const speciesRaw = await fetchGoogleSheetJSON('Species');
                 rawSpeciesList = [];
                 
@@ -189,46 +213,36 @@
                     }
                 });
 
-                if (rawSpeciesList.length === 0) throw new Error("ไม่พบข้อมูลสิ่งมีชีวิตใน Sheet");
+                if (rawSpeciesList.length === 0) throw new Error("ไม่พบรายการข้อมูลสิ่งมีชีวิตใดๆ ในแผ่นงาน");
 
-                // ==========================================
-                // 🔥 4. ปรับปรุงใหม่: สุ่มพิกัดรอบพิกัดปัจจุบันทันที 🔥
-                // ==========================================
+                // สุ่มกระจายตำแหน่งของสิ่งมีชีวิตทั้งหมดขึ้นมาพร้อมกันในรัศมีที่เลือก
                 const earthRadius = 6371000;
                 speciesData = rawSpeciesList.map((item, index) => {
-                    // สุ่ม Lat/Lon โดยใช้ configCenter.lat/lon เป็นจุดเริ่ม
                     const newLat = configCenter.lat + (Math.random() * 2 - 1) * (configCenter.radius / earthRadius) * (180 / Math.PI);
                     const newLon = configCenter.lon + (Math.random() * 2 - 1) * (configCenter.radius / earthRadius) * (180 / Math.PI) / Math.cos(configCenter.lat * Math.PI / 180);
                     
                     return { ...item, lat: newLat, lon: newLon, id: index };
                 });
 
-                // สลับลำดับเพื่อให้ความรู้สึกเป็นธรรมชาติ (Shuffle)
-                for (let i = speciesData.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [speciesData[i], speciesData[j]] = [speciesData[j], speciesData[i]];
-                }
-
-                // สุ่มเสร็จแล้ว ซ่อนหน้าจอโหลด แสดง UI เกมส์หลัก
+                // อัปเดตโครงสร้าง UI เพื่อพร้อมสำหรับการเข้าสู่โหมดเรดาร์เต็มรูปแบบ
                 document.getElementById('totalSpeciesCount').innerText = speciesData.length;
-                document.getElementById('gpsStatusText').innerText = "ข้อมูลสนามโหลดสำเร็จ! เริ่มต้นการสำรวจได้!";
                 
                 loadingScreen.classList.add('hidden');
                 gameHeader.classList.remove('hidden');
                 mainContent.classList.remove('hidden');
                 
-                // เริ่มระบบติดตามตำแหน่ง GPS แบบต่อเนื่อง
+                // เริ่มระบบการติดตามความเคลื่อนไหว GPS ต่อเนื่องแบบ Real-time
                 startGPSWatch();
                 isGameStarted = true;
 
             } catch (error) {
-                document.getElementById('loadingText').innerText = "เกิดข้อผิดพลาดในการโหลดข้อมูล: " + error.message;
+                document.getElementById('loadingText').innerText = "โหลดข้อมูลล้มเหลว: " + error.message;
                 document.getElementById('loadingText').classList.add('text-red-400');
             }
         }
 
         // ==========================================
-        // 3. ระบบ AR กล้องหลัง (WebAR)
+        // 3. ควบคุมโมดูล AR กล้องหลังและตัวรับค่า GPS
         // ==========================================
         function startARCamera() {
             const video = document.getElementById('video-feed');
@@ -239,14 +253,11 @@
                         video.play();
                     })
                     .catch(err => {
-                        console.error("Camera Error:", err);
+                        console.log("Camera block fallback active: " + err.message);
                     });
             }
         }
 
-        // ==========================================
-        // 4. ระบบ GPS และคำนวณระยะทาง
-        // ==========================================
         function startGPSWatch() {
             if ("geolocation" in navigator) {
                 navigator.geolocation.watchPosition(
@@ -257,70 +268,97 @@
             }
         }
 
+        // ==========================================
+        // 4. 🔥 ระบบประมวลผลระยะทางแบบมัลติเป้าหมายพร้อมกัน 🔥
+        // ==========================================
         const distanceUI = document.getElementById('distanceUI');
         const distanceUIParent = document.getElementById('distanceUIParent');
-        const mainContentElement = document.getElementById('mainContent');
-        const nearestSpeciesName = document.getElementById('nearestSpeciesName');
-        const gpsStatusText = document.getElementById('gpsStatusText');
-        const hintText = document.getElementById('hintText');
+        const radarListContainer = document.getElementById('radarListContainer');
 
         function updatePlayerPosition(position) {
-            // ถ้าเกมส์ยังไม่เริ่ม ไม่ต้องทำอะไร
             if (!isGameStarted) return;
 
             const playerLat = position.coords.latitude;
             const playerLon = position.coords.longitude;
             
-            let nearestSpecies = null;
-            let nearestDistance = Infinity;
+            // แสดงความแม่นยำของสัญญาณ GPS เครื่อง
+            if(position.coords.accuracy) {
+                document.getElementById('gpsAccuracyText').innerText = `ความแม่นยำสัญญาณ: ±${Math.round(position.coords.accuracy)}ม.`;
+            }
+
+            let activeTargets = [];
             
+            // 1. คำนวณระยะห่างของสิ่งมีชีวิตทุกตัวพร้อมกันทั้งหมดในลูปเดียว
             speciesData.forEach((species) => {
-                if (foundSpeciesIds.has(species.id)) return; 
+                if (foundSpeciesIds.has(species.id)) return; // ข้ามตัวที่เด็กเก็บไปแล้ว
 
                 const distance = getDistance(playerLat, playerLon, species.lat, species.lon);
-                
-                if (distance < nearestDistance) {
-                    nearestDistance = distance;
-                    nearestSpecies = species;
-                }
+                activeTargets.push({ ...species, distance: distance });
             });
 
-            if (nearestSpecies) {
-                distanceUI.innerText = Math.round(nearestDistance);
-                distanceUIParent.classList.replace('bg-blue-600', 'bg-gray-600');
+            // 2. เรียงลำดับสิ่งมีชีวิตที่ใกล้ตัวนักเรียนที่สุดขึ้นมาแสดงก่อนด้านบน
+            activeTargets.sort((a, b) => a.distance - b.distance);
+
+            // 3. ล้างกล่องแสดงผลเรดาร์ชุดเก่าเพื่อวาดข้อมูลสถานะชุดใหม่แบบวินาทีต่อวินาที
+            radarListContainer.innerHTML = "";
+
+            if (activeTargets.length > 0) {
+                const nearest = activeTargets[0];
+                
+                // อัปเดตตัวเลขระยะทางหลักบนหัวข้อ (ดึงค่าจากตัวที่อยู่ใกล้ที่สุด)
+                distanceUI.innerText = Math.round(nearest.distance);
                 distanceUIParent.classList.remove('hidden');
-                nearestSpeciesName.innerText = nearestSpecies.name;
-                gpsStatusText.innerText = "กำลังเข้าใกล้... ลองเดินไปตามคำใบ้ดูสิ!";
-                
-                if (nearestSpecies.hint) {
-                    hintText.innerText = `"${nearestSpecies.hint}"`;
-                    hintText.classList.remove('hidden');
-                } else {
-                    hintText.classList.add('hidden');
-                }
+                updateProximityEffects(nearest.distance);
 
-                updateProximityEffects(nearestDistance);
+                // 4. วาด UI แถบแสดงพิกัดสิ่งมีชีวิตทุกจุดพร้อมกันเพื่อให้นักเรียนเลือกเดินไปหาเป้าหมายใดก็ได้
+                activeTargets.forEach((target) => {
+                    const roundedDist = Math.round(target.distance);
+                    
+                    // กำหนดสีแถบตามความใกล้ไกลของเป้าหมายจุดนั้นๆ
+                    let badgeColor = "bg-blue-600/80";
+                    if (target.distance < 5) badgeColor = "bg-red-600/90 animate-pulse";
+                    else if (target.distance < 15) badgeColor = "bg-yellow-600/85";
 
-                // หากใกล้กว่า 2 เมตร ให้เด้งป๊อปอัพ
-                if (nearestDistance < 2) {
-                    showFoundCard(nearestSpecies);
-                }
+                    const itemHtml = `
+                        <div class="flex justify-between items-center bg-gray-800/60 border border-gray-700/50 rounded-xl p-3 backdrop-blur-sm">
+                            <div class="text-left flex-grow pr-2">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-base font-extrabold text-white">${target.name}</span>
+                                    ${target.distance < 5 ? '<span class="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded font-bold animate-ping">ใกล้มาก!</span>' : ''}
+                                </div>
+                                <p class="text-xs text-gray-400 mt-0.5 leading-tight italic">คำใบ้: ${target.hint || 'สำรวจบริเวณรอบๆ'}</p>
+                            </div>
+                            <div class="${badgeColor} text-white font-black px-3 py-1.5 rounded-xl text-right min-w-[75px]">
+                                ${roundedDist} <span class="text-xs font-normal">ม.</span>
+                            </div>
+                        </div>
+                    `;
+                    radarListContainer.insertAdjacentHTML('beforeend', itemHtml);
+
+                    // 5. หากก้าวเข้าใกล้พิกัดสิ่งมีชีวิตตัวใดก็ตามในรัศมีน้อยกว่า 2 เมตร ให้เปิดการ์ดแสดงผลตัวนั้นทันที
+                    if (target.distance < 2) {
+                        showFoundCard(target);
+                    }
+                });
+
             } else {
+                // กรณีเก็บรวบรวมครบทุกจุดในสนามแล้ว
                 distanceUI.innerText = "--";
-                distanceUIParent.classList.replace('bg-gray-600', 'bg-blue-600');
+                resetProximityEffects();
                 
-                // ตรวจสอบว่าหาครบทุกตัวหรือยัง
                 if (foundSpeciesIds.size > 0 && foundSpeciesIds.size === speciesData.length) {
-                    nearestSpeciesName.innerText = "หาครบแล้ว!";
-                    gpsStatusText.innerText = "เก่งมาก! คุณหาสิ่งมีชีวิตในสนามพบทั้งหมดแล้ว";
-                    hintText.classList.add('hidden');
-                    resetProximityEffects(); 
+                    radarListContainer.innerHTML = `
+                        <div class="text-center py-6 text-green-400 font-bold text-lg">
+                            🎉 ยอดเยี่ยมที่สุด! นักเรียนค้นพบสิ่งมีชีวิตครบทุกจุดสำเร็จแล้ว
+                        </div>
+                    `;
                 } else {
-                    nearestSpeciesName.innerText = "กำลังค้นหา...";
+                    radarListContainer.innerHTML = `<div class="text-center py-4 text-gray-400 text-sm">ไม่พบจุดตรวจจับเป้าหมาย</div>`;
                 }
             }
         }
 
+        // ปรับแต่งเอฟเฟกต์ไฟกะพริบขอบและหน้าจออิงตามระยะความใกล้ของเป้าหมายแรกที่ใกล้ที่สุด
         function updateProximityEffects(distance) {
             distanceUIParent.classList.remove('pulse-far', 'pulse-close', 'pulse-very-close');
             document.body.classList.remove('bg-far', 'bg-close', 'bg-very-close');
@@ -342,6 +380,7 @@
             document.body.classList.remove('bg-far', 'bg-close', 'bg-very-close');
         }
 
+        // สูตรคำนวณระยะห่างทางพิกัดผิวโลกอิงตามหลักตรีโกณมิติ (Haversine Formula) ออกมาเป็นเมตร
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const φ1 = lat1 * Math.PI/180;
@@ -353,18 +392,17 @@
         }
 
         function handleGPSError(error) {
-            document.getElementById('gpsStatusText').innerText = "ไม่สามารถอ่าน GPS ได้: " + error.message;
-            // ถ้าเป็นความผิดพลาดตอนโหลดข้อมูลตอนเริ่ม ให้ซ่อนหน้าจอโหลดและแสดงข้อผิดพลาด
+            console.log("GPS Error: " + error.message);
             if (!isGameStarted) {
                 loadingScreen.classList.add('hidden');
-                alert("ไม่สามารถขอพิกัดปัจจุบันได้ กรุณาเปิด GPS และอนุญาตการเข้าถึง");
+                alert("ระบบไม่สามารถระบุพิกัดได้ กรุณาเปิดบริการตำแหน่งที่ตั้ง (GPS) บนอุปกรณ์และกดลองใหม่อีกครั้ง");
                 startScreen.style.display = 'flex';
                 startScreen.style.opacity = '1';
             }
         }
 
         // ==========================================
-        // 5. ระบบแสดงผล (UI) แบบการ์ด
+        // 5. ระบบป๊อปอัพแสดงผลการ์ดรางวัล
         // ==========================================
         const cardContainer = document.getElementById('foundCardContainer');
         const foundStatusContainer = document.getElementById('statusContainer');
@@ -375,12 +413,14 @@
             foundSpeciesIds.add(species.id);
             document.getElementById('speciesFoundCount').innerText = foundSpeciesIds.size; 
 
+            // นำข้อมูลสิ่งมีชีวิตตัวนั้นผูกเข้ากับการ์ดรางวัล
             document.getElementById('foundCardName').innerText = species.name;
             document.getElementById('foundCardDescription').innerText = species.description;
-            document.getElementById('foundCardPoints').innerText = `ได้คะแนน: +${species.points}`;
+            document.getElementById('foundCardPoints').innerText = `รับคะแนนสะสม: +${species.points}`;
             
             const foundCardImage = document.getElementById('foundCardImage');
             const noFoundCardImage = document.getElementById('noFoundCardImage');
+            
             if (species.imageUrl) {
                 foundCardImage.src = species.imageUrl;
                 foundCardImage.classList.remove('hidden');
@@ -390,6 +430,7 @@
                 noFoundCardImage.classList.remove('hidden');
             }
             
+            // สั่งเปิดการแสดงผลหน้าต่างการ์ดลอยขึ้นมาเหนือแผนเรดาร์
             cardContainer.classList.add('active'); 
             foundStatusContainer.classList.add('hidden'); 
             distanceUIParent.classList.add('hidden'); 
@@ -403,7 +444,6 @@
             distanceUIParent.classList.remove('hidden'); 
             resetProximityEffects(); 
         });
-
     </script>
 
 </body>
