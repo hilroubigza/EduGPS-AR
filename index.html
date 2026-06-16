@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>EduGPS Explore Pro: Treasure Hunt Edition</title>
+    <title>EduGPS Explore Pro: Advanced Spawn Logic</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700;900&display=swap" rel="stylesheet">
@@ -220,17 +220,58 @@
                             points: c[2]?.v||0, 
                             hint: c[3]?.v||"", 
                             imageUrl: getDirectImageUrl(c[4]?.v||""),
-                            secretCode: c[5]?.v||"?" // ดึงรหัสลับจากคอลัมน์ F (ตำแหน่งที่ 5)
+                            secretCode: c[5]?.v||"?" 
                         });
                     }
                 });
 
+                // ==========================================
+                // 🔥 ระบบสุ่มพิกัดแบบ Advance: วงกลม 100% และมีระยะห่างอย่างน้อย 2 ม. 🔥
+                // ==========================================
                 const earthRadius = 6371000;
-                speciesData = rawList.map((item, index) => {
-                    const newLat = configCenter.lat + (Math.random() * 2 - 1) * (configCenter.radius / earthRadius) * (180 / Math.PI);
-                    const newLon = configCenter.lon + (Math.random() * 2 - 1) * (configCenter.radius / earthRadius) * (180 / Math.PI) / Math.cos(configCenter.lat * Math.PI / 180);
-                    return { ...item, lat: newLat, lon: newLon, id: index, distance: 999, bearing: 0 };
-                });
+                const MIN_DISTANCE = 2; // ห่างกันอย่างน้อย 2 เมตร
+                const MAX_RETRIES = 100; // ป้องกัน infinite loop ถ้ารัศมีแคบเกิน
+                
+                speciesData = [];
+                
+                for (let i = 0; i < rawList.length; i++) {
+                    let item = rawList[i];
+                    let isPlaced = false;
+                    let retries = 0;
+                    let newLat, newLon;
+
+                    while (!isPlaced && retries < MAX_RETRIES) {
+                        // 1. สุ่มในวงกลมเป๊ะๆ: การกระจายตัวแบบ Uniform
+                        // สุ่มมุม (0 ถึง 2PI) และระยะทาง (0 ถึง รัศมี) โดยใส่ sqrt() ให้กระจายตัวสม่ำเสมอ
+                        const r = configCenter.radius * Math.sqrt(Math.random());
+                        const theta = Math.random() * 2 * Math.PI;
+
+                        // แปลงระยะเมตรและองศากลับเป็น Offset
+                        const dx = r * Math.cos(theta); // ทิศตะวันออก/ตะวันตก
+                        const dy = r * Math.sin(theta); // ทิศเหนือ/ใต้
+
+                        newLat = configCenter.lat + (dy / earthRadius) * (180 / Math.PI);
+                        newLon = configCenter.lon + (dx / (earthRadius * Math.cos(configCenter.lat * Math.PI / 180))) * (180 / Math.PI);
+
+                        // 2. ตรวจสอบการทับซ้อน (Collision Detection) กับตัวที่วางไปแล้ว
+                        let tooClose = false;
+                        for (let j = 0; j < speciesData.length; j++) {
+                            const dist = getDistance(newLat, newLon, speciesData[j].lat, speciesData[j].lon);
+                            if (dist < MIN_DISTANCE) {
+                                tooClose = true;
+                                break;
+                            }
+                        }
+
+                        if (!tooClose) {
+                            isPlaced = true;
+                        }
+                        retries++;
+                    }
+
+                    // ยัดลง array หลัก (ถ้าวนลูปเกิน 100 ครั้ง ก็ยอมให้ลงจุดนั้น เพื่อไม่ให้ระบบค้าง)
+                    speciesData.push({ ...item, lat: newLat, lon: newLon, id: i, distance: 999, bearing: 0 });
+                }
 
                 document.getElementById('totalSpeciesCount').innerText = speciesData.length;
                 document.getElementById('loading').classList.add('hidden');
@@ -369,6 +410,7 @@
             });
         }
 
+        // คืนค่าเป็นเมตร
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
@@ -377,6 +419,7 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
         }
 
+        // คืนค่าเป็นองศา
         function getBearing(lat1, lon1, lat2, lon2) {
             const toRad = Math.PI / 180, toDeg = 180 / Math.PI;
             const dLon = (lon2 - lon1) * toRad;
@@ -394,9 +437,6 @@
             }
         }
 
-        // ==========================================
-        // 5. ป๊อปอัพแสดงผลและรหัสลับ
-        // ==========================================
         function showFoundCard(species) {
             if (foundSpeciesIds.has(species.id)) return; 
             foundSpeciesIds.add(species.id);
@@ -405,7 +445,6 @@
             document.getElementById('foundCardName').innerText = species.name;
             document.getElementById('foundCardDescription').innerText = species.description;
             
-            // นำรหัสลับมาโชว์ตัวใหญ่ๆ
             document.getElementById('foundCardCode').innerText = species.secretCode;
             
             const img = document.getElementById('foundCardImage');
